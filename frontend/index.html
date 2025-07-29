@@ -63,7 +63,7 @@
                 </div>
 
                 <!-- Summary Chart -->
-                <div class="card shadow-sm">
+                <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white">
                         <h2 class="h5 mb-0">
                             <i class="material-icons align-middle">pie_chart</i>
@@ -92,6 +92,27 @@
                             <canvas id="expense-chart"></canvas>
                         </div>
                         <ul id="summary-list" class="list-group list-group-flush mt-3"></ul>
+                    </div>
+                </div>
+
+                <!-- CSV Import -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h2 class="h5 mb-0">
+                            <i class="material-icons align-middle">file_upload</i>
+                            CSVインポート
+                        </h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="csv-drop-zone" class="text-center p-4 border-2 border-dashed rounded">
+                            <p class="text-muted">ここにCSVファイルをドラッグ＆ドロップ</p>
+                            <p class="text-muted small">または</p>
+                            <input type="file" id="csv-file-input" class="d-none" accept=".csv">
+                            <label for="csv-file-input" class="btn btn-outline-secondary">
+                                <i class="material-icons align-middle me-1">folder_open</i>
+                                ファイルを選択
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -123,6 +144,41 @@
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Preview Modal -->
+    <div class="modal fade" id="csv-preview-modal" tabindex="-1" aria-labelledby="csvPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="csvPreviewModalLabel">CSVインポートプレビュー</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>各行のカテゴリを選択してください。インポートしたくない行はチェックを外してください。</p>
+                    <div class="table-responsive" style="max-height: 60vh;">
+                        <table class="table table-sm table-striped">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="select-all-rows" checked></th>
+                                    <th>日付</th>
+                                    <th>内容</th>
+                                    <th>金額</th>
+                                    <th>カテゴリ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="csv-preview-list">
+                                <!-- CSV data will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-primary" id="import-csv-btn">インポート実行</button>
                 </div>
             </div>
         </div>

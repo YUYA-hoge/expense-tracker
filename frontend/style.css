@@ -58,3 +58,12 @@ body {
     border-left: 0;
     border-right: 0;
 }
+
+#csv-drop-zone {
+    border-style: dashed !important;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#csv-drop-zone.dragover {
+    background-color: #e9ecef;
+}

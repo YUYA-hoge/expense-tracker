@@ -20,6 +20,20 @@ const pool = new Pool({
 app.use(express.json());
 app.use(cors());
 
+// DB接続テスト
+pool.connect((err, client, release) => {
+    if (err) {
+        return console.error('Error acquiring client', err.stack);
+    }
+    client.query('SELECT NOW()', (err, result) => {
+        release();
+        if (err) {
+            return console.error('Error executing query', err.stack);
+        }
+        console.log('Database connected successfully:', result.rows[0].now);
+    });
+});
+
 // --- 静的ファイルの配信設定 (ここはそのままでOK) ---
 // frontendディレクトリを静的ファイルとして公開
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -31,7 +45,7 @@ app.get('/api/expenses', async (req, res) => {
         const result = await pool.query('SELECT * FROM expenses ORDER BY transaction_date DESC, id DESC');
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error in GET /api/expenses:', err);
         res.status(500).json({ error: 'Server error fetching expenses' });
     }
 });
@@ -49,8 +63,43 @@ app.post('/api/expenses', async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
-        console.error(err);
+        console.error('Error in POST /api/expenses:', err);
         res.status(500).json({ error: 'Server error adding expense' });
+    }
+});
+
+// 2.5. 支出を一括登録 (CSVインポート用)
+app.post('/api/expenses/bulk', async (req, res) => {
+    const expenses = req.body;
+
+    if (!Array.isArray(expenses) || expenses.length === 0) {
+        return res.status(400).json({ error: 'Invalid data format. Expected an array of expenses.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const queryText = 'INSERT INTO expenses (transaction_date, description, amount, category) VALUES ($1, $2, $3, $4)';
+        for (const expense of expenses) {
+            const { transaction_date, description, amount, category } = expense;
+            if (!transaction_date || !description || !amount || !category) {
+                // Skip invalid rows, or throw an error
+                console.warn('Skipping invalid row for bulk insert:', expense);
+                continue;
+            }
+            await client.query(queryText, [transaction_date, description, amount, category]);
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ message: `${expenses.length} expenses imported successfully.` });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Error in POST /api/expenses/bulk:', err);
+        res.status(500).json({ error: 'Server error during bulk insert.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -68,7 +117,7 @@ app.put('/api/expenses/:id', async (req, res) => {
         }
         res.json(result.rows[0]);
     } catch (err) {
-        console.error(err);
+        console.error('Error in PUT /api/expenses/:id:', err);
         res.status(500).json({ error: 'Server error updating expense' });
     }
 });
@@ -83,7 +132,7 @@ app.delete('/api/expenses/:id', async (req, res) => {
         }
         res.status(204).send(); // No Content
     } catch (err) {
-        console.error(err);
+        console.error('Error in DELETE /api/expenses/:id:', err);
         res.status(500).json({ error: 'Server error deleting expense' });
     }
 });
@@ -118,7 +167,7 @@ app.get('/api/expenses/summary', async (req, res) => {
         const result = await pool.query(query, queryParams);
         res.json(result.rows);
     } catch (err) {
-        console.error(err);
+        console.error('Error in GET /api/expenses/summary:', err);
         res.status(500).json({ error: 'Server error fetching summary' });
     }
 });
@@ -129,7 +178,7 @@ app.get('/api/categories', async (req, res) => {
         const result = await pool.query('SELECT name FROM categories ORDER BY name');
         res.json(result.rows.map(row => row.name)); // 名前だけを返す
     } catch (err) {
-        console.error(err);
+        console.error('Error in GET /api/categories:', err);
         res.status(500).json({ error: 'Server error fetching categories' });
     }
 });

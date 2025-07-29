@@ -1,3 +1,10 @@
+// --- PapaParse Script Loader ---
+// Load PapaParse library for CSV parsing
+const papaParseScript = document.createElement('script');
+papaParseScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js';
+document.head.appendChild(papaParseScript);
+
+
 const API_URL = 'http://localhost:3000/api';
 
 // --- DOM Elements ---
@@ -23,13 +30,22 @@ const editCategorySelect = document.getElementById('edit-category');
 const editDescriptionInput = document.getElementById('edit-description');
 const saveEditButton = document.getElementById('save-edit-btn');
 
+// CSV Import Elements
+const csvDropZone = document.getElementById('csv-drop-zone');
+const csvFileInput = document.getElementById('csv-file-input');
+const csvPreviewModalElement = document.getElementById('csv-preview-modal');
+const csvPreviewModal = new bootstrap.Modal(csvPreviewModalElement);
+const csvPreviewList = document.getElementById('csv-preview-list');
+const importCsvButton = document.getElementById('import-csv-btn');
+const selectAllRowsCheckbox = document.getElementById('select-all-rows');
+
 
 let expenseChart; // Chart.js instance
+let availableCategories = []; // To store categories for reuse
 
 // --- Utility Functions ---
 const formatDate = (dateString) => {
     const date = new Date(dateString);
-    // JSTに補正
     const userOffset = date.getTimezoneOffset() * 60000;
     const jstDate = new Date(date.getTime() - userOffset);
     return jstDate.toISOString().split('T')[0];
@@ -112,7 +128,7 @@ function renderSummaryAndChart(summary) {
     const labels = [];
     const data = [];
     const backgroundColors = [
-        '#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc', 
+        '#42a5f5', '#66bb6a', '#ffa726', '#ef5350', '#ab47bc',
         '#26a69a', '#78909c', '#ff7043', '#8d6e63', '#ec407a'
     ];
 
@@ -184,9 +200,9 @@ async function initializeApp() {
     summaryStartDateInput.value = firstDayOfMonth.toISOString().split('T')[0];
     summaryEndDateInput.value = today.toISOString().split('T')[0];
 
-    const categories = await fetchCategories();
-    populateCategorySelect(categorySelect, categories);
-    populateCategorySelect(editCategorySelect, categories);
+    availableCategories = await fetchCategories();
+    populateCategorySelect(categorySelect, availableCategories);
+    populateCategorySelect(editCategorySelect, availableCategories);
 
     await refreshAllData();
 }
@@ -243,7 +259,7 @@ expenseList.addEventListener('click', async (event) => {
         editIdInput.value = id;
         editDateInput.value = cells[0].textContent;
         editAmountInput.value = parseFloat(cells[1].textContent.replace(/[¥,]/g, ''));
-        editCategorySelect.value = cells[2].textContent;
+        editCategorySelect.value = cells[2].querySelector('.badge').textContent;
         editDescriptionInput.value = cells[3].textContent;
         editModal.show();
     }
@@ -283,5 +299,139 @@ saveEditButton.addEventListener('click', async () => {
 
 applyFilterButton.addEventListener('click', refreshAllData);
 
+
+// --- CSV Import Logic ---
+function handleFile(file) {
+    if (!file) {
+        alert('ファイルが選択されていません。');
+        return;
+    }
+    // ファイル名でCSVか判定を強化
+    if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
+        alert('CSVファイルを選択してください。');
+        return;
+    }
+
+    Papa.parse(file, {
+        encoding: "Shift_JIS", // 文字コードをShift_JISに指定
+        complete: (results) => {
+            if (results.errors.length > 0) {
+                console.error("CSV Parse errors:", results.errors);
+            }
+            renderCsvPreview(results.data);
+            csvPreviewModal.show();
+        },
+        error: (error) => {
+            alert('CSVの解析に失敗しました: ' + error.message);
+        }
+    });
+}
+
+function renderCsvPreview(data) {
+    csvPreviewList.innerHTML = '';
+    data.forEach((row, index) => {
+        if (row.length < 8) return; // Skip malformed rows
+
+        const date = row[0];
+        const description = row[1];
+        const amount = row[6];
+
+        // Basic validation
+        if (!date || !description || !amount || isNaN(parseFloat(amount))) {
+            return;
+        }
+
+        const tableRow = document.createElement('tr');
+        tableRow.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" checked></td>
+            <td><input type="date" class="form-control form-control-sm" value="${formatDate(date)}"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${description}"></td>
+            <td><input type="number" class="form-control form-control-sm" value="${amount}"></td>
+            <td>
+                <select class="form-select form-select-sm">
+                    ${availableCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                </select>
+            </td>
+        `;
+        csvPreviewList.appendChild(tableRow);
+    });
+    selectAllRowsCheckbox.checked = true;
+}
+
+csvDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    csvDropZone.classList.add('dragover');
+});
+
+csvDropZone.addEventListener('dragleave', () => {
+    csvDropZone.classList.remove('dragover');
+});
+
+csvDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    csvDropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    handleFile(file);
+});
+
+csvFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    handleFile(file);
+});
+
+selectAllRowsCheckbox.addEventListener('change', (e) => {
+    const checkboxes = csvPreviewList.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = e.target.checked;
+    });
+});
+
+importCsvButton.addEventListener('click', async () => {
+    const rowsToImport = [];
+    const previewRows = csvPreviewList.querySelectorAll('tr');
+
+    previewRows.forEach(row => {
+        const checkbox = row.querySelector('.row-checkbox');
+        if (checkbox.checked) {
+            const inputs = row.querySelectorAll('input, select');
+            rowsToImport.push({
+                transaction_date: inputs[1].value,
+                description: inputs[2].value,
+                amount: parseFloat(inputs[3].value),
+                category: inputs[4].value,
+            });
+        }
+    });
+
+    if (rowsToImport.length === 0) {
+        alert('インポートするデータが選択されていません。');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/expenses/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rowsToImport),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '一括登録に失敗しました');
+        }
+
+        csvPreviewModal.hide();
+        await refreshAllData();
+        alert(`${rowsToImport.length}件の支出をインポートしました。`);
+
+    } catch (error) {
+        console.error('CSVインポートエラー:', error);
+        alert(`インポートに失敗しました: ${error.message}`);
+    }
+});
+
+
 // --- Initial Load ---
-document.addEventListener('DOMContentLoaded', initializeApp);
+papaParseScript.onload = () => {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+};
