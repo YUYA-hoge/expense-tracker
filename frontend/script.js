@@ -432,6 +432,4 @@ importCsvButton.addEventListener('click', async () => {
 
 
 // --- Initial Load ---
-papaParseScript.onload = () => {
-    document.addEventListener('DOMContentLoaded', initializeApp);
-};
+document.addEventListener('DOMContentLoaded', initializeApp);
